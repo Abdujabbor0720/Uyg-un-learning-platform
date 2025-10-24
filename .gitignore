@@ -1,0 +1,77 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (local)
+.env*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# env files (production - keep .env.production for deployment)
+# .env.production
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# uploads - video files
+/public/uploads/*.mp4
+/public/uploads/*.webm
+/public/uploads/*.avi
+/public/uploads/*.mov
+/public/uploads/*.mkv
+/public/uploads/*.flv
+
+# client folder (backend)
+/client/node_modules
+/client/.env
+/client/dist
+/client/uploads
+/client/*.db
+/client/anor.db
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs
+*.log
+
+# Testing
+/coverage
+.nyc_output
+
+# Temporary files
+*.tmp
+*.temp
+.cache
