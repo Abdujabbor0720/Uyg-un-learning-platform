@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { json, urlencoded } from 'express';
 import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
@@ -23,6 +24,10 @@ async function bootstrap() {
 
   // Cookie parser
   app.use(cookieParser());
+
+  // Body parser with increased limits
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ limit: '50mb', extended: true }));
 
   const port = process.env.PORT || 5000;
   await app.listen(port);
