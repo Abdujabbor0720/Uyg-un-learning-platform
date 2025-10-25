@@ -1,0 +1,30 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - main # main branch’ga push qilinsa ishga tushadi
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.1
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Deploy to server
+        run: |
+          ssh deploy@185.191.141.106 << 'EOF'
+            cd /root/Uyg-un-learning-platform
+            git pull origin main
+            npm install
+            npm run build
+            pm2 restart uyg-platform
+            pm2 restart uygunlik-backend
+          EOF
