@@ -1,6 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { VideoService, initializeDatabase } from '@/lib/postgres';
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await initializeDatabase();
+    const videoId = parseInt(params.id);
+
+    if (isNaN(videoId)) {
+      return NextResponse.json({ error: 'Noto\'g\'ri video ID' }, { status: 400 });
+    }
+
+    const video = await VideoService.findById(videoId);
+    if (!video) {
+      return NextResponse.json({ error: 'Video topilmadi' }, { status: 404 });
+    }
+    return NextResponse.json(video, { status: 200 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 });
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
