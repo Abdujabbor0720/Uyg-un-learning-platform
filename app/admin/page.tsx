@@ -96,6 +96,7 @@ export default function AdminPage() {
 
   const [isCourseFormOpen, setIsCourseFormOpen] = useState(false);
   const [isUserCoursesFormOpen, setIsUserCoursesFormOpen] = useState(false);
+  const [isLessonFormOpen, setIsLessonFormOpen] = useState(false);
 
   // Video yuklash uchun state'lar (tarif dialogida ishlatiladi)
   const [uploadingVideos, setUploadingVideos] = useState<File[]>([]);
@@ -103,6 +104,15 @@ export default function AdminPage() {
     [key: string]: number;
   }>({});
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
+
+  // Lesson (Dars) form states
+  const [lessonTitle, setLessonTitle] = useState("");
+  const [lessonDescription, setLessonDescription] = useState("");
+  const [lessonOrder, setLessonOrder] = useState<number>(1);
+  const [lessonVideoFile, setLessonVideoFile] = useState<File | null>(null);
+  const [lessonResources, setLessonResources] = useState<FileList | null>(null);
+  const [lessonCourseId, setLessonCourseId] = useState<string>("");
+  const [lessonUploading, setLessonUploading] = useState(false);
 
   // Form states for Course
   const [courseTitle, setCourseTitle] = useState("");
@@ -117,6 +127,7 @@ export default function AdminPage() {
   const [usersPage, setUsersPage] = useState(1);
   const [usersTotalPages, setUsersTotalPages] = useState(1);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [totalUsersCount, setTotalUsersCount] = useState(0);
 
   // Settings states
   const [settings, setSettings] = useState({
@@ -239,10 +250,12 @@ export default function AdminPage() {
       );
       console.log("Users fetched:", { data, total });
       setUsers(data);
+      setTotalUsersCount(total); // Umumiy foydalanuvchilar sonini saqlash
       setUsersTotalPages(Math.ceil(total / 10));
     } catch (error) {
       console.error("Foydalanuvchilarni yuklashda xato:", error);
       setUsers([]);
+      setTotalUsersCount(0);
     } finally {
       setUsersLoading(false);
     }
@@ -258,7 +271,7 @@ export default function AdminPage() {
           siteName: data.site_name || "Uygunlik Learning Platform",
           siteDescription:
             data.site_description || "Professional online learning platform",
-          maxVideoSize: data.max_video_size || 500,
+          maxVideoSize: data.max_video_size || 3000,
           allowedVideoFormats: data.allowed_video_formats || [
             "mp4",
             "webm",
@@ -391,12 +404,25 @@ export default function AdminPage() {
   };
 
   const handleDeleteCourse = async (id: string) => {
-    if (window.confirm("Haqiqatan ham bu kursni o'chirmoqchimisiz?")) {
+    if (
+      window.confirm(
+        "Haqiqatan ham bu tarifni o'chirmoqchimisiz? Bu tarifga tegishli barcha ma'lumotlar o'chiriladi!"
+      )
+    ) {
       try {
         await CourseService.remove(id);
+        toast({
+          title: "Muvaffaqiyatli!",
+          description: "Tarif muvaffaqiyatli o'chirildi.",
+        });
         fetchCourses();
       } catch (error) {
-        console.error("Kursni o'chirishda xato:", error);
+        console.error("Tarifni o'chirishda xato:", error);
+        toast({
+          title: "Xatolik!",
+          description: "Tarifni o'chirishda xatolik yuz berdi.",
+          variant: "destructive",
+        });
       }
     }
   };
@@ -569,6 +595,110 @@ export default function AdminPage() {
 
   const [coursesToAddToUser, setCoursesToAddToUser] = useState<string[]>([]);
 
+  // Dars qo'shish dialogini ochish
+  const handleOpenLessonForm = (courseId: string) => {
+    setLessonCourseId(courseId);
+    setLessonTitle("");
+    setLessonDescription("");
+    setLessonOrder(1);
+    setLessonVideoFile(null);
+    setLessonResources(null);
+    setIsLessonFormOpen(true);
+  };
+
+  // Dars qo'shish
+  const handleCreateLesson = async () => {
+    if (!lessonTitle.trim()) {
+      toast({
+        title: "Xatolik!",
+        description: "Dars sarlavhasini kiriting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!lessonDescription.trim()) {
+      toast({
+        title: "Xatolik!",
+        description: "Dars tavsifini kiriting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!lessonVideoFile) {
+      toast({
+        title: "Xatolik!",
+        description: "Video faylni tanlang.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLessonUploading(true);
+
+    try {
+      // 1. Video faylni yuklash
+      const formData = new FormData();
+      formData.append("file", lessonVideoFile);
+      formData.append("title", lessonTitle);
+      formData.append("description", lessonDescription);
+
+      const videoResponse = await fetch("/api/upload/video", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!videoResponse.ok) {
+        throw new Error("Video yuklashda xatolik");
+      }
+
+      const uploadedVideo = await videoResponse.json();
+
+      // 2. Kursga video qo'shish
+      if (lessonCourseId) {
+        const course = courses.find((c) => String(c.id) === lessonCourseId);
+        if (course) {
+          const updatedVideos = [...(course.videos || []), uploadedVideo.id];
+          await CourseService.update(lessonCourseId, {
+            title: course.title,
+            description: course.description,
+            price: course.price,
+            videos: updatedVideos.map((id) => String(id)),
+          });
+        }
+      }
+
+      // 3. Resurslarni yuklash (agar mavjud bo'lsa)
+      if (lessonResources && lessonResources.length > 0) {
+        // Bu qismni keyinroq implement qilish mumkin
+        console.log("Resources:", lessonResources);
+      }
+
+      toast({
+        title: "Muvaffaqiyatli!",
+        description: "Dars muvaffaqiyatli qo'shildi.",
+      });
+
+      // Yangilash
+      await fetchCourses();
+      await fetchVideos();
+
+      // Dialog yopish
+      setIsLessonFormOpen(false);
+    } catch (error: any) {
+      console.error("Dars qo'shishda xato:", error);
+      toast({
+        title: "Xatolik!",
+        description: error.message || "Dars qo'shishda xatolik yuz berdi.",
+        variant: "destructive",
+      });
+    } finally {
+      setLessonUploading(false);
+    }
+  };
+
   const handleEditUserCoursesClick = (user: User) => {
     setSelectedUser(user);
     const currentUserCourseIds =
@@ -643,7 +773,7 @@ export default function AdminPage() {
   };
 
   const stats = {
-    totalUsers: users.length,
+    totalUsers: totalUsersCount, // Umumiy foydalanuvchilar soni
     activeUsers: users.filter((u) => u.status === true).length,
     pendingPayments: 0,
     totalRevenue: "0 so'm",
@@ -911,72 +1041,122 @@ export default function AdminPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Tariflar boshqaruvi</CardTitle>
+                  <div>
+                    <CardTitle>Tariflar</CardTitle>
+                    <CardDescription>
+                      Kurs tariflarini boshqarish va darslarni ko'rish
+                    </CardDescription>
+                  </div>
                   <Button
                     onClick={() => handleOpenCourseForm(null)}
-                    className="bg-red-600 hover:bg-red-700"
+                    className="bg-blue-600 hover:bg-blue-700"
                   >
                     <PlusCircle className="h-4 w-4 mr-2" />
-                    Yangi tarif
+                    Yangi tarif qo'shish
                   </Button>
                 </div>
-                <CardDescription>
-                  Tarif materiallarini va darslarni boshqaring
-                </CardDescription>
               </CardHeader>
               <CardContent>
                 {loading ? (
                   <p>Tariflar yuklanmoqda...</p>
                 ) : courses.length === 0 ? (
-                  <p>Hozircha tariflar mavjud emas.</p>
+                  <div className="text-center py-16">
+                    <BookOpen className="mx-auto h-16 w-16 text-gray-400 mb-4" />
+                    <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                      Tariflar mavjud emas
+                    </h3>
+                    <p className="text-gray-500 mb-6">
+                      Hozircha hech qanday tarif qo'shilmagan
+                    </p>
+                    <Button
+                      onClick={() => handleOpenCourseForm(null)}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      Birinchi tarifni qo'shish
+                    </Button>
+                  </div>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Sarlavha</TableHead>
-                        <TableHead>Narxi</TableHead>
-                        <TableHead>Darslar soni</TableHead>
-                        <TableHead className="text-right">Harakatlar</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {courses.map((course) => (
-                        <TableRow key={course.id}>
-                          <TableCell className="font-medium">
-                            {course.title}
-                          </TableCell>
-                          <TableCell>
-                            {course.price.toLocaleString()} so'm
-                          </TableCell>
-                          <TableCell>
-                            {Array.isArray(course.videos)
-                              ? course.videos.length
-                              : 0}
-                          </TableCell>
-                          <TableCell className="text-right">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {courses.map((course) => (
+                      <Card
+                        key={course.id}
+                        className="relative hover:shadow-lg transition-shadow"
+                      >
+                        <CardHeader>
+                          <div className="flex items-start justify-between mb-2">
+                            <CardTitle className="text-xl font-bold">
+                              {course.title}
+                            </CardTitle>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenCourseForm(course)}
+                                title="Tahrirlash"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  handleDeleteCourse(String(course.id))
+                                }
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                title="O'chirish"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-600">
+                            {course.description || "Tarif tavsifi"}
+                          </p>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="mb-6">
+                            <div className="flex items-baseline">
+                              <span className="text-4xl font-bold text-blue-600">
+                                {course.price.toLocaleString()}
+                              </span>
+                              <span className="ml-2 text-gray-600">so'm</span>
+                            </div>
+                          </div>
+
+                          <div className="mb-6">
+                            <Badge variant="secondary" className="text-sm">
+                              <BookOpen className="h-3 w-3 mr-1" />
+                              {Array.isArray(course.videos)
+                                ? course.videos.length
+                                : 0}{" "}
+                              ta dars
+                            </Badge>
+                          </div>
+
+                          <div className="space-y-2">
                             <Button
-                              variant="outline"
-                              size="sm"
-                              className="mr-2"
-                              onClick={() => handleOpenCourseForm(course)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-red-600 border-red-200 hover:bg-red-50 bg-transparent"
+                              className="w-full bg-green-600 hover:bg-green-700"
                               onClick={() =>
-                                handleDeleteCourse(String(course.id))
+                                handleOpenLessonForm(String(course.id))
                               }
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <PlusCircle className="h-4 w-4 mr-2" />
+                              Yangi dars qo'shish
                             </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                            <Link
+                              href={`/admin/course/${course.id}`}
+                              className="block"
+                            >
+                              <Button className="w-full bg-blue-600 hover:bg-blue-700">
+                                <BookOpen className="h-4 w-4 mr-2" />
+                                Darslarni boshqarish
+                              </Button>
+                            </Link>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -1441,6 +1621,181 @@ export default function AdminPage() {
               className="bg-red-600 hover:bg-red-700"
             >
               Saqlash
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dars qo'shish dialogi */}
+      <Dialog open={isLessonFormOpen} onOpenChange={setIsLessonFormOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Yangi dars qo'shish</DialogTitle>
+            <DialogDescription>
+              Dars ma'lumotlarini to'ldiring
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            {/* Sarlavha */}
+            <div className="space-y-2">
+              <Label htmlFor="lesson-title">Sarlavha (majburiy)</Label>
+              <Input
+                id="lesson-title"
+                placeholder="Dars sarlavhasi"
+                value={lessonTitle}
+                onChange={(e) => setLessonTitle(e.target.value)}
+                disabled={lessonUploading}
+              />
+            </div>
+
+            {/* Tavsif */}
+            <div className="space-y-2">
+              <Label htmlFor="lesson-description">Tavsif (majburiy)</Label>
+              <Textarea
+                id="lesson-description"
+                placeholder="Dars haqida batafsil ma'lumot"
+                value={lessonDescription}
+                onChange={(e) => setLessonDescription(e.target.value)}
+                rows={4}
+                disabled={lessonUploading}
+              />
+              <p className="text-xs text-gray-500">0 belgi</p>
+            </div>
+
+            {/* Tartib raqami */}
+            <div className="space-y-2">
+              <Label htmlFor="lesson-order">Tartib raqami</Label>
+              <Input
+                id="lesson-order"
+                type="number"
+                min="1"
+                placeholder="1"
+                value={lessonOrder}
+                onChange={(e) => setLessonOrder(parseInt(e.target.value) || 1)}
+                disabled={lessonUploading}
+              />
+              <p className="text-xs text-gray-500">
+                Darsning tartibi (1, 2, 3, ...)
+              </p>
+            </div>
+
+            {/* Video yuklash */}
+            <div className="space-y-2">
+              <Label htmlFor="lesson-video">Video fayl (majburiy)</Label>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <Input
+                  id="lesson-video"
+                  type="file"
+                  accept="video/*"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setLessonVideoFile(e.target.files[0]);
+                    }
+                  }}
+                  disabled={lessonUploading}
+                  className="hidden"
+                />
+                <label htmlFor="lesson-video" className="cursor-pointer block">
+                  {lessonVideoFile ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      <span className="text-sm font-medium">
+                        {lessonVideoFile.name}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        ({(lessonVideoFile.size / 1024 / 1024).toFixed(2)} MB)
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <Upload className="h-8 w-8 text-gray-400" />
+                      <p className="text-sm text-gray-600">
+                        Video faylni tanlang
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {settings.allowedVideoFormats
+                          .map((f) => f.toUpperCase())
+                          .join(", ")}{" "}
+                        - Maks: {settings.maxVideoSize}MB
+                      </p>
+                    </div>
+                  )}
+                </label>
+              </div>
+            </div>
+
+            {/* Qo'shimcha resurslar */}
+            <div className="space-y-2">
+              <Label htmlFor="lesson-resources">
+                Qo'shimcha resurslar (ixtiyoriy)
+              </Label>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <Input
+                  id="lesson-resources"
+                  type="file"
+                  accept=".pdf,.doc,.docx,.zip"
+                  multiple
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      setLessonResources(e.target.files);
+                    }
+                  }}
+                  disabled={lessonUploading}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="lesson-resources"
+                  className="cursor-pointer block"
+                >
+                  {lessonResources && lessonResources.length > 0 ? (
+                    <div className="space-y-1">
+                      {Array.from(lessonResources).map((file, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-center gap-2"
+                        >
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span className="text-sm">{file.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <Upload className="h-8 w-8 text-gray-400" />
+                      <p className="text-sm text-gray-600">
+                        PDF, DOCX, ZIP fayllarni torting yoki tanlang
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        Bir nechta faylni tanlashingiz mumkin
+                      </p>
+                    </div>
+                  )}
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => setIsLessonFormOpen(false)}
+              disabled={lessonUploading}
+            >
+              Bekor qilish
+            </Button>
+            <Button
+              onClick={handleCreateLesson}
+              disabled={lessonUploading}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {lessonUploading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Yuklanmoqda...
+                </>
+              ) : (
+                "Saqlash"
+              )}
             </Button>
           </div>
         </DialogContent>
