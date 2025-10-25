@@ -9,6 +9,7 @@ export interface CreateCourseDto {
   videos?: string[];
 }
 
+
 export interface UpdateCourseDto {
   title?: string;
   description?: string;
