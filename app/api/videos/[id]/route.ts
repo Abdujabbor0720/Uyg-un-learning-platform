@@ -3,7 +3,7 @@ import { VideoService, initializeDatabase } from "@/lib/postgres";
 
 export const dynamic = "force-dynamic";
 
-// Next.js 15+ da params Promise bo'ladi
+// GET metodi - VIDEO OLISH
 export async function GET(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
@@ -11,7 +11,6 @@ export async function GET(
   try {
     await initializeDatabase();
 
-    // Params'ni await qilish kerak (Next.js 15+)
     const params = await props.params;
     const videoId = parseInt(params.id);
 
@@ -38,6 +37,7 @@ export async function GET(
   }
 }
 
+// PATCH metodi - VIDEO YANGILASH
 export async function PATCH(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
@@ -45,7 +45,6 @@ export async function PATCH(
   try {
     await initializeDatabase();
 
-    // Params'ni await qilish
     const params = await props.params;
     const videoId = parseInt(params.id);
 
@@ -86,6 +85,7 @@ export async function PATCH(
   }
 }
 
+// DELETE metodi - VIDEO O'CHIRISH
 export async function DELETE(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
@@ -93,7 +93,6 @@ export async function DELETE(
   try {
     await initializeDatabase();
 
-    // Params'ni await qilish
     const params = await props.params;
     const videoId = parseInt(params.id);
 
@@ -110,7 +109,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Video topilmadi" }, { status: 404 });
     }
 
-    // Faylni o'chirish (optional)
+    // Faylni o'chirish
     try {
       const fs = require("fs");
       const path = require("path");
@@ -122,11 +121,9 @@ export async function DELETE(
 
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
-        console.log("Video file deleted:", filePath);
       }
     } catch (fileError) {
       console.error("File deletion error:", fileError);
-      // Fayl o'chirishda xato bo'lsa ham davom etamiz
     }
 
     const deletedVideo = await VideoService.delete(videoId);
