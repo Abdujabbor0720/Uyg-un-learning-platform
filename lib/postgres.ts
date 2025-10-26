@@ -7,9 +7,9 @@ const pool = new Pool({
     process.env.NODE_ENV === "production"
       ? { rejectUnauthorized: false }
       : false,
-  max: 20, // Maximum number of clients in the pool
-  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
+  max: parseInt(process.env.PG_POOL_MAX || "20", 10), // Maximum number of clients in the pool
+  idleTimeoutMillis: parseInt(process.env.PG_IDLE_TIMEOUT_MS || "60000", 10), // Close idle clients after 60 seconds
+  connectionTimeoutMillis: parseInt(process.env.PG_CONNECTION_TIMEOUT_MS || "10000", 10), // Wait up to 10s to establish a new connection
 });
 
 // Database connection status
@@ -22,8 +22,33 @@ export async function initializeDatabase() {
   }
 
   try {
-    // Test database connection
-    await pool.query("SELECT 1");
+    // Test database connection with retries (some cloud DBs may need a few seconds)
+    const maxAttempts = parseInt(process.env.DB_CONNECT_ATTEMPTS || "5", 10);
+    const baseDelay = parseInt(process.env.DB_CONNECT_BASE_DELAY_MS || "1000", 10);
+
+    async function sleep(ms: number) {
+      return new Promise((res) => setTimeout(res, ms));
+    }
+
+    let attempt = 0;
+    let lastErr: any = null;
+    while (attempt < maxAttempts) {
+      try {
+        await pool.query("SELECT 1");
+        lastErr = null;
+        break;
+      } catch (err: any) {
+        lastErr = err;
+        attempt++;
+        const delay = baseDelay * attempt; // linear backoff
+        console.warn(`Database connection attempt ${attempt} failed, retrying in ${delay}ms...`, err?.message || err);
+        await sleep(delay);
+      }
+    }
+
+    if (lastErr) {
+      throw lastErr;
+    }
     console.log("✅ PostgreSQL database connected");
     // Create users table
     await pool.query(`
