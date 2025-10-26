@@ -3,19 +3,16 @@ import { VideoService, initializeDatabase } from "@/lib/postgres";
 
 export const dynamic = "force-dynamic";
 
-// Params type'ni aniqroq qilish
-type RouteParams = {
-  params: Promise<{ id: string }> | { id: string };
-};
-
-export async function GET(request: NextRequest, context: RouteParams) {
+// Next.js 15+ da params Promise bo'ladi
+export async function GET(
+  request: NextRequest,
+  props: { params: Promise<{ id: string }> }
+) {
   try {
     await initializeDatabase();
 
-    // Params async yoki sync bo'lishi mumkin
-    const params =
-      "then" in context.params ? await context.params : context.params;
-
+    // Params'ni await qilish kerak (Next.js 15+)
+    const params = await props.params;
     const videoId = parseInt(params.id);
 
     if (isNaN(videoId)) {
@@ -41,16 +38,16 @@ export async function GET(request: NextRequest, context: RouteParams) {
   }
 }
 
-export async function PATCH(request: NextRequest, context: RouteParams) {
+export async function PATCH(
+  request: NextRequest,
+  props: { params: Promise<{ id: string }> }
+) {
   try {
     await initializeDatabase();
 
-    const params =
-      "then" in context.params ? await context.params : context.params;
-
+    // Params'ni await qilish
+    const params = await props.params;
     const videoId = parseInt(params.id);
-    const body = await request.json();
-    const { title, description } = body;
 
     if (isNaN(videoId)) {
       return NextResponse.json(
@@ -59,9 +56,19 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
       );
     }
 
+    const body = await request.json();
+    const { title, description } = body;
+
     const updates: any = {};
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json(
+        { error: "Yangilanish ma'lumotlari topilmadi" },
+        { status: 400 }
+      );
+    }
 
     const updatedVideo = await VideoService.update(videoId, updates);
 
@@ -79,13 +86,15 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
   }
 }
 
-export async function DELETE(request: NextRequest, context: RouteParams) {
+export async function DELETE(
+  request: NextRequest,
+  props: { params: Promise<{ id: string }> }
+) {
   try {
     await initializeDatabase();
 
-    const params =
-      "then" in context.params ? await context.params : context.params;
-
+    // Params'ni await qilish
+    const params = await props.params;
     const videoId = parseInt(params.id);
 
     if (isNaN(videoId)) {
@@ -95,14 +104,38 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
       );
     }
 
-    const deletedVideo = await VideoService.delete(videoId);
+    const video = await VideoService.findById(videoId);
 
-    if (!deletedVideo) {
+    if (!video) {
       return NextResponse.json({ error: "Video topilmadi" }, { status: 404 });
     }
 
+    // Faylni o'chirish (optional)
+    try {
+      const fs = require("fs");
+      const path = require("path");
+      const filePath = path.join(
+        process.cwd(),
+        "public/uploads",
+        video.filename
+      );
+
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log("Video file deleted:", filePath);
+      }
+    } catch (fileError) {
+      console.error("File deletion error:", fileError);
+      // Fayl o'chirishda xato bo'lsa ham davom etamiz
+    }
+
+    const deletedVideo = await VideoService.delete(videoId);
+
     return NextResponse.json(
-      { message: "Video muvaffaqiyatli o'chirildi" },
+      {
+        message: "Video muvaffaqiyatli o'chirildi",
+        video: deletedVideo,
+      },
       { status: 200 }
     );
   } catch (error: any) {
