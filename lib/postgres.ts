@@ -7,9 +7,14 @@ const pool = new Pool({
     process.env.NODE_ENV === "production"
       ? { rejectUnauthorized: false }
       : false,
-  max: parseInt(process.env.PG_POOL_MAX || "20", 10), // Maximum number of clients in the pool
-  idleTimeoutMillis: parseInt(process.env.PG_IDLE_TIMEOUT_MS || "60000", 10), // Close idle clients after 60 seconds
-  connectionTimeoutMillis: parseInt(process.env.PG_CONNECTION_TIMEOUT_MS || "10000", 10), // Wait up to 10s to establish a new connection
+  max: parseInt(process.env.PG_POOL_MAX || "10", 10), // Kamroq connection (Railway limit)
+  min: 2, // Minimum connections
+  idleTimeoutMillis: parseInt(process.env.PG_IDLE_TIMEOUT_MS || "30000", 10), // 30s idle timeout
+  connectionTimeoutMillis: parseInt(process.env.PG_CONNECTION_TIMEOUT_MS || "15000", 10), // 15s connection timeout
+  statement_timeout: 30000, // 30s query timeout
+  query_timeout: 30000, // 30s query timeout
+  keepAlive: true, // Keep connections alive
+  keepAliveInitialDelayMillis: 10000, // 10s keepalive delay
 });
 
 // Database connection status
@@ -639,8 +644,19 @@ export class VideoService {
   }
 
   static async findById(id: number) {
-    const result = await pool.query("SELECT * FROM videos WHERE id = $1", [id]);
-    return result.rows[0] || null;
+    try {
+      const result = await pool.query("SELECT * FROM videos WHERE id = $1", [id]);
+      return result.rows[0] || null;
+    } catch (error: any) {
+      console.error("VideoService.findById error:", error.message);
+      // Retry once if connection timeout
+      if (error.message.includes("timeout") || error.message.includes("terminated")) {
+        console.log("Retrying VideoService.findById...");
+        const result = await pool.query("SELECT * FROM videos WHERE id = $1", [id]);
+        return result.rows[0] || null;
+      }
+      throw error;
+    }
   }
 
   static async findByFilename(filename: string) {
