@@ -340,26 +340,31 @@ export class UserService {
     // Har bir user uchun courses'ni yuklash
     const users = result.rows;
     for (const user of users) {
-      const coursesResult = await pool.query(
-        `SELECT c.* 
-         FROM courses c
-         INNER JOIN user_courses uc ON c.id = uc.course_id
-         WHERE uc.user_id = $1
-         ORDER BY c.created_at DESC`,
-        [user.id]
-      );
-      
-      // Har bir kurs uchun videolarni yuklash
-      const courses = coursesResult.rows;
-      for (const course of courses) {
-        const videosResult = await pool.query(
-          `SELECT * FROM videos WHERE course_id = $1 ORDER BY created_at ASC`,
-          [course.id]
+      try {
+        const coursesResult = await pool.query(
+          `SELECT c.* 
+           FROM courses c
+           INNER JOIN user_courses uc ON c.id = uc.course_id
+           WHERE uc.user_id = $1 AND uc.course_id IS NOT NULL
+           ORDER BY c.created_at DESC`,
+          [user.id]
         );
-        course.videos = videosResult.rows;
+        
+        // Har bir kurs uchun videolarni yuklash
+        const courses = coursesResult.rows;
+        for (const course of courses) {
+          const videosResult = await pool.query(
+            `SELECT * FROM videos WHERE course_id = $1 ORDER BY created_at ASC`,
+            [course.id]
+          );
+          course.videos = videosResult.rows;
+        }
+        
+        user.courses = courses;
+      } catch (error: any) {
+        console.error(`Error loading courses for user ${user.id}:`, error.message);
+        user.courses = []; // Xato bo'lsa bo'sh array
       }
-      
-      user.courses = courses;
     }
 
     // Get total count
