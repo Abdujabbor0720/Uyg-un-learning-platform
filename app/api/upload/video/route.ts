@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       title,
       description: description || "",
       filename: safeFilename,
-      url: safeFilename, // Faqat filename saqlaymiz
+      url: `/uploads/${safeFilename}`, // /uploads/ bilan saqlaymiz (static serving uchun)
     });
 
     console.log("Video saved to database:", video);
