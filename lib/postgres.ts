@@ -7,14 +7,28 @@ const pool = new Pool({
     process.env.NODE_ENV === "production"
       ? { rejectUnauthorized: false }
       : false,
-  max: parseInt(process.env.PG_POOL_MAX || "10", 10), // Kamroq connection (Railway limit)
-  min: 2, // Minimum connections
-  idleTimeoutMillis: parseInt(process.env.PG_IDLE_TIMEOUT_MS || "30000", 10), // 30s idle timeout
-  connectionTimeoutMillis: parseInt(process.env.PG_CONNECTION_TIMEOUT_MS || "15000", 10), // 15s connection timeout
-  statement_timeout: 30000, // 30s query timeout
-  query_timeout: 30000, // 30s query timeout
+  max: parseInt(process.env.PG_POOL_MAX || "5", 10), // Railway free tier limit (5 ta connection)
+  min: 1, // Minimum connections
+  idleTimeoutMillis: parseInt(process.env.PG_IDLE_TIMEOUT_MS || "20000", 10), // 20s idle timeout
+  connectionTimeoutMillis: parseInt(process.env.PG_CONNECTION_TIMEOUT_MS || "20000", 10), // 20s connection timeout
+  statement_timeout: 40000, // 40s query timeout
+  query_timeout: 40000, // 40s query timeout
   keepAlive: true, // Keep connections alive
-  keepAliveInitialDelayMillis: 10000, // 10s keepalive delay
+  keepAliveInitialDelayMillis: 5000, // 5s keepalive delay
+  allowExitOnIdle: true, // Allow pool to close when idle
+});
+
+// Handle pool errors
+pool.on('error', (err) => {
+  console.error('Unexpected database pool error:', err);
+});
+
+pool.on('connect', () => {
+  console.log('New database connection established');
+});
+
+pool.on('remove', () => {
+  console.log('Database connection removed from pool');
 });
 
 // Database connection status
@@ -644,19 +658,37 @@ export class VideoService {
   }
 
   static async findById(id: number) {
-    try {
-      const result = await pool.query("SELECT * FROM videos WHERE id = $1", [id]);
-      return result.rows[0] || null;
-    } catch (error: any) {
-      console.error("VideoService.findById error:", error.message);
-      // Retry once if connection timeout
-      if (error.message.includes("timeout") || error.message.includes("terminated")) {
-        console.log("Retrying VideoService.findById...");
+    const maxRetries = 3;
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
         const result = await pool.query("SELECT * FROM videos WHERE id = $1", [id]);
         return result.rows[0] || null;
+      } catch (error: any) {
+        lastError = error;
+        console.error(`VideoService.findById attempt ${attempt}/${maxRetries} error:`, error.message);
+        
+        // Retry on connection/timeout errors
+        if (
+          attempt < maxRetries &&
+          (error.message.includes("timeout") || 
+           error.message.includes("terminated") ||
+           error.message.includes("connection"))
+        ) {
+          // Exponential backoff: wait 500ms, 1s, 1.5s
+          const delay = attempt * 500;
+          console.log(`Waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        // Don't retry other errors
+        throw error;
       }
-      throw error;
     }
+    
+    throw lastError;
   }
 
   static async findByFilename(filename: string) {
