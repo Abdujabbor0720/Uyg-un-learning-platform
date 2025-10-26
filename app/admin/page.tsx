@@ -1387,7 +1387,7 @@ export default function AdminPage() {
                           <TableRow key={videoId}>
                             <TableCell className="font-medium">
                               <Link
-                                href={`/watch/${video.url.split("/").pop()}`}
+                                href={`/watch/${video.filename}`}
                                 className="hover:underline"
                                 target="_blank"
                               >

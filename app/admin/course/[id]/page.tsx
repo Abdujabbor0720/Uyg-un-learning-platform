@@ -484,10 +484,7 @@ export default function CourseManagePage() {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Link
-                        href={`/watch/${video.url.split("/").pop()}`}
-                        target="_blank"
-                      >
+                      <Link href={`/watch/${video.filename}`} target="_blank">
                         <Button variant="outline" size="sm">
                           Ko'rish
                         </Button>

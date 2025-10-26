@@ -244,7 +244,7 @@ export default function WatchPage() {
       <div className="relative w-11/12 max-w-5xl z-20">
         <video
           ref={videoRef}
-          src={video.url.startsWith('http') ? video.url : `${API_URL}/video-stream/stream/${video.url.split("/").pop()}`}
+          src={video.url.startsWith('http') ? video.url : `${API_URL}/video-stream/stream/${video.filename}`}
           className="w-full rounded-xl shadow-xl"
           controls={false}
           disablePictureInPicture
